@@ -8,4 +8,3 @@ test2 :
 
 test3 : 
 	swipl -g "test_parse3, halt" test_parser.pl
-
