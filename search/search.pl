@@ -4,49 +4,54 @@
 :- dynamic treasure/1.
 :- dynamic initial/1.
 
-% Entry point: returns the complete action sequence (move + pickup)
+% Entry point: returns complete sequence (move + pickup)
 search(Actions) :-
     initial(Start),
     treasure(Goal),
     bfs([(Start, [], [])], [], Goal, RevActions),
     reverse(RevActions, Actions).
 
-% Goal reached case
+% Goal reached
 bfs([(Pos, _Keys, Path)|_], _, Pos, Path) :- !.
 
-% BFS recursive search
+% BFS main loop
+bfs([(Pos, Keys, Path)|Rest], Visited, Goal, FinalPath) :-
+    sort(Keys, SortedKeys),
+    State = (Pos, SortedKeys),
+
+    % Skip if already visited in this key state
+    member(State, Visited), !,
+    bfs(Rest, Visited, Goal, FinalPath).
+
 bfs([(Pos, Keys, Path)|Rest], Visited, Goal, FinalPath) :-
     sort(Keys, SortedKeys),
 
-    % Moves through unlocked doors
+    % Get next moves through open doors
     findall((Next, SortedKeys, [move(Pos, Next)|Path]),
         (   (door(Pos, Next); door(Next, Pos)),
-            \+ is_locked(Pos, Next),
-            \+ member((Next, SortedKeys), Visited)
+            \+ is_locked(Pos, Next)
         ), MoveList),
 
-    % Moves through locked doors if key is present
+    % Get moves through locked doors if key exists
     findall((Next, SortedKeys, [move(Pos, Next)|Path]),
         (   (locked_door(Pos, Next, Color); locked_door(Next, Pos, Color)),
-            member(Color, SortedKeys),
-            \+ member((Next, SortedKeys), Visited)
+            member(Color, SortedKeys)
         ), UnlockList),
 
-    % Pickup keys
+    % Pickup key if available and not already held
     findall((Pos, SortedNewKeys, [pickup(Pos, Color)|Path]),
         (   key(Pos, Color),
             \+ member(Color, Keys),
-            append([Color], Keys, NewKeys),
+            append(Keys, [Color], NewKeys),
             sort(NewKeys, SortedNewKeys)
         ), PickupList),
 
-    % Combine all moves, unlocks, and pickups
-    append(PickupList, Rest, R0),
-    append(R0, MoveList, R1),
-    append(R1, UnlockList, NewQueue),
+    append(PickupList, MoveList, L1),
+    append(L1, UnlockList, NextStates),
+    append(Rest, NextStates, NewQueue),
 
-    bfs(NewQueue, [(Pos, SortedKeys)|Visited], Goal, FinalPath).
+    bfs(NewQueue, [State|Visited], Goal, FinalPath).
 
-% Check if door is locked in either direction
+% Check if locked door
 is_locked(A, B) :- locked_door(A, B, _).
 is_locked(A, B) :- locked_door(B, A, _).
