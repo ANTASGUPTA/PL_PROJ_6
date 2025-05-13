@@ -41,9 +41,9 @@ bfs([(Pos, Keys, Path)|Rest], Visited, Goal, FinalPath) :-
         ), PickupList),
 
     % Combine all moves, unlocks, and pickups
-    append(Rest, MoveList, R1),
-    append(R1, UnlockList, R2),
-    append(R2, PickupList, NewQueue),
+    append(PickupList, Rest, R0),
+    append(R0, MoveList, R1),
+    append(R1, UnlockList, NewQueue),
 
     bfs(NewQueue, [(Pos, SortedKeys)|Visited], Goal, FinalPath).
 
