@@ -6,44 +6,46 @@
 
 search(Actions) :-
     initial(Start),
-    treasure(Goal),
-    bfs([(Start, [], [])], [], Goal, RevActions),
-    reverse(RevActions, Actions).
+    collect_keys(Start, [], CollectedKeys),
+    bfs_queue([state(Start, CollectedKeys, [])], [], Actions).
 
-bfs([(Pos, _Keys, Path)|_], _, Pos, Path) :- !.
+% When goal is reached
+bfs_queue([state(Room, _, Path)|_], _, Path) :-
+    treasure(Room), !.
 
-bfs([(Pos, Keys, Path)|Rest], Visited, Goal, FinalPath) :-
-    sort(Keys, SortedKeys),
-    State = (Pos, SortedKeys),
+% Skip visited states
+bfs_queue([state(Room, Keys, _)|Rest], Visited, Actions) :-
+    member(visited(Room, Keys), Visited), !,
+    bfs_queue(Rest, Visited, Actions).
 
-    (member(State, Visited) -> bfs(Rest, Visited, Goal, FinalPath) ;
-    (
-        % Pickup keys if any
-        findall((Pos, SortedNewKeys, Path),
-            (   key(Pos, Color),
-                \+ member(Color, Keys),
-                append(Keys, [Color], NewKeys),
-                sort(NewKeys, SortedNewKeys)
-            ), PickupList),
+% BFS explore next states
+bfs_queue([state(Room, Keys, Path)|Rest], Visited, Actions) :-
+    findall(
+        state(NextRoom, NextKeys, NewPath),
+        (
+            expand_state(Room, Keys, NextRoom, NextKeys, ActionSequence),
+            append(Path, ActionSequence, NewPath)
+        ),
+        NextStates
+    ),
+    append(Rest, NextStates, NewQueue),
+    bfs_queue(NewQueue, [visited(Room, Keys)|Visited], Actions).
 
-        % Unlock and move in one combined step for locked doors
-        findall((Next, SortedKeys, [unlock(Color), move(Pos, Next)|Path]),
-            (   (locked_door(Pos, Next, Color); locked_door(Next, Pos, Color)),
-                member(Color, SortedKeys)
-            ), UnlockMoveList),
+% Handling next steps when door is open
+expand_state(Room, Keys, Next, KeysAfter, [move(Room, Next)]) :-
+    collect_keys(Room, Keys, KeysHere),
+    (door(Room, Next); door(Next, Room)),
+    KeysAfter = KeysHere.
 
-        % Move through only unlocked doors
-        findall((Next, SortedKeys, [move(Pos, Next)|Path]),
-            (   (door(Pos, Next); door(Next, Pos)),
-                \+ is_locked(Pos, Next)
-            ), MoveList),
+% Handling next steps when door is locked, requires unlock
+expand_state(Room, Keys, Next, KeysAfter, [unlock(Color), move(Room, Next)]) :-
+    collect_keys(Room, Keys, KeysHere),
+    (locked_door(Room, Next, Color); locked_door(Next, Room, Color)),
+    member(Color, KeysHere),
+    KeysAfter = KeysHere.
 
-        append(PickupList, UnlockMoveList, R1),
-        append(R1, MoveList, NextStates),
-        append(Rest, NextStates, NewQueue),
-
-        bfs(NewQueue, [State|Visited], Goal, FinalPath)
-    )).
-
-is_locked(A, B) :- locked_door(A, B, _).
-is_locked(A, B) :- locked_door(B, A, _).
+% Collect keys if present (internally only, not shown in output)
+collect_keys(Room, OldKeys, UpdatedKeys) :-
+    findall(Color, (key(Room, Color), \+ member(Color, OldKeys)), NewColors),
+    append(NewColors, OldKeys, Combined),
+    sort(Combined, UpdatedKeys).
